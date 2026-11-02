@@ -1,8 +1,8 @@
-# 🎹 rusty-synth
+#  rusty-synth
 
 **`rusty-synth`** is a low-latency, real-time polyphonic terminal audio synthesizer and live FFT frequency spectrum visualizer written in Rust. Designed with strict real-time DSP systems engineering principles, the audio callback operates with **zero heap allocations, zero locks, and zero system calls**.
 
-## 📸 Live Demo & Preview
+##  Live Demo & Preview
 
 ### Application Screenshot
 
@@ -29,7 +29,7 @@
 
 ```
 
-## ✨ Key Features
+##  Key Features
 
 * **Lock-Free Real-Time Audio Engine**: Powered by `cpal` at `48,000 Hz` or `44,100 Hz` with ultra-low `256`-sample hardware buffers.
 
@@ -73,7 +73,7 @@
 | `-` / `=` | **Master Gain** | Decreases / increases master output volume (`5%` – `150%`) | 
 | `Q` / `Esc` | **Quit** | Gracefully stops threads and restores terminal state | 
 
-## 🏗️ System Architecture
+##  System Architecture
 
 `rusty-synth` splits execution across three decoupled threads communicating strictly via lock-free atomics and bounded `crossbeam-channel` queues:
 
@@ -107,7 +107,7 @@ $$
 
    * Supports Kitty/Crossterm keyboard enhancement flags for polyphonic key-release tracking, with an automatic gate-release fallback for standard terminals.
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### Prerequisites
 
@@ -142,7 +142,7 @@ cargo run --release
 
 ```
 
-## 📂 Project Structure
+##  Project Structure
 
 ```
 rusty-synth/
@@ -168,6 +168,6 @@ rusty-synth/
 
 ```
 
-## 📜 License
+##  License
 
 Distributed under the MIT License. See `LICENSE` for more information.
