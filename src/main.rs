@@ -53,29 +53,20 @@ fn main() -> Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-    let supports_key_release = execute!(
+    let _ = execute!(
         stdout,
         PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::REPORT_EVENT_TYPES)
-    )
-    .is_ok();
+    );
 
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let app_result = run_app(
-        &mut terminal,
-        Arc::clone(&shared),
-        cmd_tx,
-        snapshot_rx,
-        supports_key_release,
-    );
+    let app_result = run_app(&mut terminal, Arc::clone(&shared), cmd_tx, snapshot_rx);
 
     shared.running.store(false, Ordering::Relaxed);
     let _ = fft_handle.join();
 
-    if supports_key_release {
-        let _ = execute!(terminal.backend_mut(), PopKeyboardEnhancementFlags);
-    }
+    let _ = execute!(terminal.backend_mut(), PopKeyboardEnhancementFlags);
     disable_raw_mode()?;
     execute!(
         terminal.backend_mut(),
@@ -87,18 +78,27 @@ fn main() -> Result<()> {
     app_result
 }
 
+/// Tracks each active note's last event time and whether it has received a repeat event.
+struct ActiveKey {
+    last_seen: Instant,
+    is_held: bool,
+}
+
 fn run_app<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
     shared: Arc<SharedSynthState>,
     cmd_tx: crossbeam_channel::Sender<AudioCommand>,
     snapshot_rx: crossbeam_channel::Receiver<VisualizerSnapshot>,
-    supports_key_release: bool,
 ) -> Result<()> {
     let tick_rate = Duration::from_millis(16);
-    let auto_release_timeout = Duration::from_millis(320);
+    // Initial tap gate duration (must exceed OS initial key-repeat delay of ~250-300ms
+    // if held, or release cleanly after a single quick tap)
+    let tap_gate_duration = Duration::from_millis(320);
+    // Once a key is actively repeating (held down), release rapidly (~90ms) after repeats stop
+    let hold_release_duration = Duration::from_millis(90);
 
     let mut latest_snapshot = VisualizerSnapshot::default();
-    let mut active_notes: HashMap<u8, Instant> = HashMap::with_capacity(16);
+    let mut active_notes: HashMap<u8, ActiveKey> = HashMap::with_capacity(16);
 
     while shared.running.load(Ordering::Relaxed) {
         while let Ok(snap) = snapshot_rx.try_recv() {
@@ -147,15 +147,33 @@ fn run_app<B: ratatui::backend::Backend>(
                     }
                     KeyCode::Char(c) => {
                         if let Some(midi_note) = char_to_midi(c) {
+                            let now = Instant::now();
                             match key.kind {
                                 KeyEventKind::Press => {
-                                    if !active_notes.contains_key(&midi_note) {
+                                    if let Some(existing) = active_notes.get_mut(&midi_note) {
+                                        // Standard terminals send KeyEventKind::Press for key-repeats too.
+                                        // If the key is already active, mark it as held and refresh timer.
+                                        existing.last_seen = now;
+                                        existing.is_held = true;
+                                    } else {
                                         let _ = cmd_tx.try_send(AudioCommand::NoteOn(midi_note));
+                                        active_notes.insert(
+                                            midi_note,
+                                            ActiveKey {
+                                                last_seen: now,
+                                                is_held: false,
+                                            },
+                                        );
                                     }
-                                    active_notes.insert(midi_note, Instant::now());
                                 }
                                 KeyEventKind::Repeat => {
-                                    active_notes.insert(midi_note, Instant::now());
+                                    active_notes.insert(
+                                        midi_note,
+                                        ActiveKey {
+                                            last_seen: now,
+                                            is_held: true,
+                                        },
+                                    );
                                 }
                                 KeyEventKind::Release => {
                                     if active_notes.remove(&midi_note).is_some() {
@@ -170,17 +188,22 @@ fn run_app<B: ratatui::backend::Backend>(
             }
         }
 
-        if !supports_key_release {
-            let now = Instant::now();
-            active_notes.retain(|&note, &mut last_seen| {
-                if now.duration_since(last_seen) > auto_release_timeout {
-                    let _ = cmd_tx.try_send(AudioCommand::NoteOff(note));
-                    false
-                } else {
-                    true
-                }
-            });
-        }
+        // Always run the release watchdog so notes never get stuck on any terminal
+        let now = Instant::now();
+        active_notes.retain(|note, state| {
+            let timeout = if state.is_held {
+                hold_release_duration
+            } else {
+                tap_gate_duration
+            };
+
+            if now.duration_since(state.last_seen) > timeout {
+                let _ = cmd_tx.try_send(AudioCommand::NoteOff(*note));
+                false
+            } else {
+                true
+            }
+        });
 
         let held_list: Vec<u8> = active_notes.keys().copied().collect();
         terminal.draw(|f| draw_ui(f, &shared, &latest_snapshot, &held_list))?;
