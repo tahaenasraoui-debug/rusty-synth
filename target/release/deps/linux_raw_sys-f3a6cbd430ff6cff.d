@@ -1,0 +1,11 @@
+/home/tahary/rusty-synth/target/release/deps/linux_raw_sys-f3a6cbd430ff6cff.d: /home/tahary/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.4.15/src/lib.rs /home/tahary/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.4.15/src/elf.rs /home/tahary/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.4.15/src/x86_64/errno.rs /home/tahary/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.4.15/src/x86_64/general.rs /home/tahary/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.4.15/src/x86_64/ioctl.rs
+
+/home/tahary/rusty-synth/target/release/deps/liblinux_raw_sys-f3a6cbd430ff6cff.rlib: /home/tahary/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.4.15/src/lib.rs /home/tahary/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.4.15/src/elf.rs /home/tahary/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.4.15/src/x86_64/errno.rs /home/tahary/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.4.15/src/x86_64/general.rs /home/tahary/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.4.15/src/x86_64/ioctl.rs
+
+/home/tahary/rusty-synth/target/release/deps/liblinux_raw_sys-f3a6cbd430ff6cff.rmeta: /home/tahary/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.4.15/src/lib.rs /home/tahary/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.4.15/src/elf.rs /home/tahary/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.4.15/src/x86_64/errno.rs /home/tahary/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.4.15/src/x86_64/general.rs /home/tahary/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.4.15/src/x86_64/ioctl.rs
+
+/home/tahary/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.4.15/src/lib.rs:
+/home/tahary/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.4.15/src/elf.rs:
+/home/tahary/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.4.15/src/x86_64/errno.rs:
+/home/tahary/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.4.15/src/x86_64/general.rs:
+/home/tahary/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/linux-raw-sys-0.4.15/src/x86_64/ioctl.rs:

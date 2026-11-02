@@ -1,0 +1,15 @@
+[package]
+name = "rusty-synth"
+version = "0.1.0"
+edition = "2021"
+authors = ["Abass le roi des Bobbys"]
+description = "Real-time polyphonic terminal synthesizer and FFT spectrum visualizer"
+
+[dependencies]
+cpal = "0.15.3"
+ratatui = "0.28.1"
+crossterm = "0.28.1"
+rustfft = "6.2.0"
+crossbeam-channel = "0.5.13"
+num-complex = "0.4.6"
+anyhow = "1.0.89"
