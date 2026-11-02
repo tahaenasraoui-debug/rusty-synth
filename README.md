@@ -2,9 +2,12 @@
 
 **`rusty-synth`** is a low-latency, real-time polyphonic terminal audio synthesizer and live FFT frequency spectrum visualizer written in Rust. Designed with strict real-time DSP systems engineering principles, the audio callback operates with **zero heap allocations, zero locks, and zero system calls**.
 
-##  Live Demo & Preview
 
 ### Application Screenshot
+
+<p align="center">
+  <img src="./assets/image.png" >
+</p>
 
 ### Terminal Interface Layout
 
