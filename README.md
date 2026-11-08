@@ -9,25 +9,9 @@
   <img src="./assets/image.png" >
 </p>
 
-### Terminal Interface Layout
+
 
 ```
-┌─ RUSTY-SYNTH DSP ENGINE ─────────┐┌─ ENVELOPE & FILTER ───────────┐┌─ OUTPUT LEVEL (dBFS) ──────┐
-│ Oscillator: [Sawtooth] Voices:3/8││ ADSR:   A:15ms D:120ms S:70%  ││ ████████████████░░░ -8.4dB │
-│ Audio I/O:  48000 Hz | 256 smp   ││ Filter: LPF 4500 Hz Gain: 75% ││                            │
-└──────────────────────────────────┘└───────────────────────────────┘└────────────────────────────┘
-┌─ REAL-TIME FFT SPECTRUM ANALYZER (28 LOG BANDS, -60dB to 0dB) ──┐┌─ WAVEFORM OSCILLOSCOPE ──────┐
-│       ███     ███                                               ││      ╭─╮      ╭─╮      ╭─╮   │
-│       ███     ███     ███                                       ││     ╭╯ ╰╮    ╭╯ ╰╮    ╭╯ ╰╮  │
-│   ███ ███ ███ ███ ███ ███ ███                                   ││─────╯───╰────╯───╰────╯───╰──│
-│   ███ ███ ███ ███ ███ ███ ███ ███ ███ ███                       ││                              │
-│  45  68  102 153 230 345 518 778 1.1k 1.7k 2.6k 3.9k 5.9k 8.9k  ││                              │
-└─────────────────────────────────────────────────────────────────┘└──────────────────────────────┘
-┌─ LIVE KEYBOARD & SYNTH CONTROLS ────────────────────────────────────────────────────────────────┐
-│ Keys:  A:C4  W:C#4  S:D4  E:D#4  D:E4  F:F4  T:F#4  G:G4  Y:G#4  H:A4  U:A#4  J:B4  K:C5        │
-│ Waveforms: [1] Sine  [2] Square  [3] Sawtooth  [4] Triangle  [5] White Noise                    │
-│ Controls:  [ / ] Filter Cutoff   - / = Master Gain   Q / Esc Quit                               │
-└─────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 
 ```
@@ -138,7 +122,7 @@ $$
 Always build and run in `--release` mode to ensure DSP math and FFT passes are fully optimized:
 
 ```
-git clone https://github.com/yourusername/rusty-synth.git
+git clone https://github.com/tahaenasraoui-debug/rusty-synth.git
 cd rusty-synth
 cargo run --release
 
