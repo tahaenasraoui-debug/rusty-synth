@@ -82,6 +82,9 @@ pub struct OnePoleLowPass {
     a0: f32,
     b1: f32,
     sample_rate: f32,
+    last_cutoff_hz: f32,
+    #[cfg(test)]
+    coeff_recomputations: usize,
 }
 
 impl OnePoleLowPass {
@@ -91,17 +94,38 @@ impl OnePoleLowPass {
             a0: 1.0,
             b1: 0.0,
             sample_rate: sample_rate.max(1.0),
+            last_cutoff_hz: -1.0,
+            #[cfg(test)]
+            coeff_recomputations: 0,
         };
-        filter.set_cutoff(cutoff_hz);
+        let initial_cutoff = if cutoff_hz.is_finite() {
+            cutoff_hz
+        } else {
+            4500.0
+        };
+        filter.set_cutoff(initial_cutoff);
         filter
     }
 
     #[inline]
     pub fn set_cutoff(&mut self, cutoff_hz: f32) {
-        let nyquist = self.sample_rate * 0.49;
-        let fc = (cutoff_hz.clamp(40.0, nyquist)) / self.sample_rate;
+        if !cutoff_hz.is_finite() {
+            return;
+        }
+        let nyquist = (self.sample_rate * 0.49).max(40.0);
+        let clamped = cutoff_hz.clamp(40.0, nyquist);
+        // Skip exp() when clamped cutoff matches the cached value.
+        if clamped == self.last_cutoff_hz {
+            return;
+        }
+        self.last_cutoff_hz = clamped;
+        let fc = clamped / self.sample_rate;
         self.b1 = (-TAU * fc).exp();
         self.a0 = 1.0 - self.b1;
+        #[cfg(test)]
+        {
+            self.coeff_recomputations += 1;
+        }
     }
 
     #[inline]
@@ -200,5 +224,117 @@ impl VoiceManager {
         let output = (filtered * master_gain).tanh();
 
         (output, active_count)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn active_notes_set(vm: &VoiceManager) -> Vec<u8> {
+        let mut notes: Vec<u8> = vm.voices.iter().filter_map(|v| v.note()).collect();
+        notes.sort_unstable();
+        notes
+    }
+
+    #[test]
+    fn cutoff_caching_skips_redundant_recomputations() {
+        let mut filter = OnePoleLowPass::new(48_000.0, 4500.0);
+        assert_eq!(filter.coeff_recomputations, 1);
+        let initial_b1 = filter.b1;
+
+        for _ in 0..500 {
+            filter.set_cutoff(4500.0);
+        }
+        assert_eq!(filter.coeff_recomputations, 1);
+        assert!((filter.b1 - initial_b1).abs() < 1e-7);
+
+        // Values above Nyquist clamp to the same frequency and also cache-hit
+        filter.set_cutoff(30_000.0);
+        assert_eq!(filter.coeff_recomputations, 2);
+        filter.set_cutoff(40_000.0);
+        assert_eq!(filter.coeff_recomputations, 2);
+
+        // Non-finite cutoffs are safely ignored
+        filter.set_cutoff(f32::NAN);
+        filter.set_cutoff(f32::INFINITY);
+        assert_eq!(filter.coeff_recomputations, 2);
+
+        // Distinct cutoff updates coefficients
+        filter.set_cutoff(1200.0);
+        assert_eq!(filter.coeff_recomputations, 3);
+        assert!(filter.b1 > initial_b1);
+    }
+
+    #[test]
+    fn voice_manager_caches_cutoff_across_samples() {
+        let mut vm = VoiceManager::new(48_000.0);
+        vm.note_on(60);
+
+        for _ in 0..1000 {
+            let _ = vm.next_sample(4500.0, 0.75);
+        }
+        // 1 from VoiceManager::new(6000.0) + 1 from first next_sample(4500.0)
+        assert_eq!(vm.filter.coeff_recomputations, 2);
+
+        let _ = vm.next_sample(2200.0, 0.75);
+        assert_eq!(vm.filter.coeff_recomputations, 3);
+    }
+
+    #[test]
+    fn voice_retrigger_reuses_same_voice() {
+        let mut vm = VoiceManager::new(48_000.0);
+        vm.note_on(60);
+        vm.note_on(60);
+
+        let (_, active_count) = vm.next_sample(4500.0, 0.75);
+        assert_eq!(active_count, 1);
+        assert_eq!(active_notes_set(&vm), vec![60]);
+    }
+
+    #[test]
+    fn voice_stealing_prefers_oldest_releasing_voice() {
+        let mut vm = VoiceManager::new(48_000.0);
+        for note in 60..68 {
+            vm.note_on(note);
+        }
+        assert_eq!(active_notes_set(&vm), (60..68).collect::<Vec<u8>>());
+
+        // Release note 64 (`age = 5`) and note 62 (`age = 3`).
+        // Releasing voices take priority over older sustained note 60 (`age = 1`),
+        // and among releasing voices the oldest note-on (`62`) is stolen first.
+        vm.note_off(64);
+        vm.note_off(62);
+
+        vm.note_on(72);
+        let active = active_notes_set(&vm);
+        assert_eq!(active.len(), MAX_VOICES);
+        assert!(!active.contains(&62));
+        assert!(active.contains(&60));
+        assert!(active.contains(&64));
+        assert!(active.contains(&72));
+
+        // Next note steals the remaining releasing voice (64) rather than sustained note 60.
+        vm.note_on(74);
+        let active = active_notes_set(&vm);
+        assert_eq!(active.len(), MAX_VOICES);
+        assert!(!active.contains(&64));
+        assert!(active.contains(&60));
+        assert!(active.contains(&74));
+    }
+
+    #[test]
+    fn voice_stealing_falls_back_to_oldest_active_voice() {
+        let mut vm = VoiceManager::new(48_000.0);
+        for note in 60..68 {
+            vm.note_on(note);
+        }
+
+        // No voices are releasing -> oldest active voice (60) must be stolen
+        vm.note_on(72);
+        let active = active_notes_set(&vm);
+        assert_eq!(active.len(), MAX_VOICES);
+        assert!(!active.contains(&60));
+        assert!(active.contains(&72));
     }
 }

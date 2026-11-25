@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use anyhow::{anyhow, Context, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -40,6 +40,14 @@ pub struct SharedSynthState {
     pub sample_rate: AtomicU32,
     pub buffer_size: AtomicU32,
     pub running: AtomicBool,
+    has_audio_error: AtomicBool,
+    audio_error: Mutex<Option<String>>,
+}
+
+impl Default for SharedSynthState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SharedSynthState {
@@ -52,7 +60,26 @@ impl SharedSynthState {
             sample_rate: AtomicU32::new(48_000),
             buffer_size: AtomicU32::new(256),
             running: AtomicBool::new(true),
+            has_audio_error: AtomicBool::new(false),
+            audio_error: Mutex::new(None),
         }
+    }
+
+    /// Records the most recent CPAL stream error so the TUI and exit path can surface it
+    /// without printing raw text over the alternate screen.
+    pub fn set_audio_error(&self, message: impl Into<String>) {
+        if let Ok(mut slot) = self.audio_error.lock() {
+            *slot = Some(message.into());
+            self.has_audio_error.store(true, Ordering::Release);
+        }
+    }
+
+    /// Returns the latest recorded CPAL stream error, if any.
+    pub fn audio_error(&self) -> Option<String> {
+        if !self.has_audio_error.load(Ordering::Acquire) {
+            return None;
+        }
+        self.audio_error.lock().ok().and_then(|slot| slot.clone())
     }
 
     #[inline]
@@ -141,30 +168,19 @@ pub fn start_audio_stream(
     shared.sample_rate.store(sample_rate, Ordering::Relaxed);
 
     let stream = match sample_format {
-        SampleFormat::F32 => build_stream::<f32>(
-            &device,
-            &stream_config,
-            shared,
-            cmd_rx,
-            viz_tx,
-            |s| s,
-        )?,
-        SampleFormat::I16 => build_stream::<i16>(
-            &device,
-            &stream_config,
-            shared,
-            cmd_rx,
-            viz_tx,
-            |s| (s * i16::MAX as f32) as i16,
-        )?,
-        SampleFormat::U16 => build_stream::<u16>(
-            &device,
-            &stream_config,
-            shared,
-            cmd_rx,
-            viz_tx,
-            |s| ((s * 0.5 + 0.5) * u16::MAX as f32) as u16,
-        )?,
+        SampleFormat::F32 => {
+            build_stream::<f32>(&device, &stream_config, shared, cmd_rx, viz_tx, |s| s)?
+        }
+        SampleFormat::I16 => {
+            build_stream::<i16>(&device, &stream_config, shared, cmd_rx, viz_tx, |s| {
+                (s * i16::MAX as f32) as i16
+            })?
+        }
+        SampleFormat::U16 => {
+            build_stream::<u16>(&device, &stream_config, shared, cmd_rx, viz_tx, |s| {
+                ((s * 0.5 + 0.5) * u16::MAX as f32) as u16
+            })?
+        }
         _ => return Err(anyhow!("Unsupported sample format")),
     };
 
@@ -189,7 +205,10 @@ where
     let mut voice_manager = VoiceManager::new(sample_rate);
     let mut out_frame = AudioFrame::default();
 
-    let err_fn = move |_err| {};
+    let err_shared = Arc::clone(&shared);
+    let err_fn = move |err: cpal::StreamError| {
+        err_shared.set_audio_error(err.to_string());
+    };
 
     let stream = device.build_output_stream(
         config,
@@ -237,4 +256,28 @@ where
     )?;
 
     Ok(stream)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shared_state_clamps_parameters_and_stores_audio_errors() {
+        let state = SharedSynthState::new();
+        assert_eq!(state.audio_error(), None);
+
+        state.set_master_gain(10.0);
+        assert!((state.master_gain() - 1.5).abs() < 1e-6);
+        state.set_master_gain(-1.0);
+        assert!((state.master_gain() - 0.05).abs() < 1e-6);
+
+        state.set_cutoff_hz(50_000.0);
+        assert!((state.cutoff_hz() - 18_000.0).abs() < 1e-4);
+        state.set_cutoff_hz(10.0);
+        assert!((state.cutoff_hz() - 120.0).abs() < 1e-4);
+
+        state.set_audio_error("device disconnected");
+        assert_eq!(state.audio_error().as_deref(), Some("device disconnected"));
+    }
 }

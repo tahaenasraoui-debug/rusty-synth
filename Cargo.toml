@@ -2,8 +2,10 @@
 name = "rusty-synth"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.75"
 authors = ["Abass le roi des Bobbys"]
 description = "Real-time polyphonic terminal synthesizer and FFT spectrum visualizer"
+license = "MIT"
 
 [dependencies]
 cpal = "0.15.3"

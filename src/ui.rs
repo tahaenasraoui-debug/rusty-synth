@@ -34,6 +34,74 @@ pub const PIANO_KEYS: [(char, u8, &str); 13] = [
     ('k', 72, "C5"),
 ];
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SpectrumLayout {
+    bar_width: u16,
+    bar_gap: u16,
+    num_bars: usize,
+}
+
+/// Computes bar geometry and visible band count so the spectrum fits inside `inner_width` without clipping.
+fn compute_spectrum_layout(inner_width: u16) -> SpectrumLayout {
+    let w = inner_width as usize;
+    if w == 0 {
+        return SpectrumLayout {
+            bar_width: 1,
+            bar_gap: 0,
+            num_bars: 0,
+        };
+    }
+
+    // Prefer 3-column bars (matching 3-char Hz labels and 0..100 values) down to narrow panes.
+    let (bar_width, bar_gap) = if w >= 35 {
+        (3, 1)
+    } else if w >= 18 {
+        (2, 1)
+    } else if w >= 5 {
+        (1, 1)
+    } else {
+        (1, 0)
+    };
+
+    let num_bars = ((w + bar_gap) / (bar_width + bar_gap)).clamp(1, NUM_BINS);
+    SpectrumLayout {
+        bar_width: bar_width as u16,
+        bar_gap: bar_gap as u16,
+        num_bars,
+    }
+}
+
+/// Pools the 28 logarithmic FFT bins into `num_bars` bands spanning the full 45 Hz–11 kHz range.
+fn aggregate_spectrum_bars(bins: &[u64; NUM_BINS], num_bars: usize) -> Vec<(&'static str, u64)> {
+    if num_bars == 0 {
+        return Vec::new();
+    }
+    if num_bars >= NUM_BINS {
+        return BIN_LABELS
+            .iter()
+            .copied()
+            .zip(bins.iter().copied())
+            .collect();
+    }
+
+    let mut bars = Vec::with_capacity(num_bars);
+    for k in 0..num_bars {
+        let start = k * NUM_BINS / num_bars;
+        let end = ((k + 1) * NUM_BINS / num_bars).max(start + 1).min(NUM_BINS);
+        let peak = bins[start..end].iter().copied().max().unwrap_or(0);
+
+        let label_idx = if k == 0 {
+            0
+        } else if k + 1 == num_bars {
+            NUM_BINS - 1
+        } else {
+            (start + end - 1) / 2
+        };
+        bars.push((BIN_LABELS[label_idx], peak));
+    }
+    bars
+}
+
 pub fn draw_ui(
     frame: &mut Frame,
     shared: &SharedSynthState,
@@ -82,35 +150,82 @@ fn draw_hud(
     let buffer_size = shared.buffer_size.load(Ordering::Relaxed);
     let voices = shared.active_voices.load(Ordering::Relaxed);
 
-    let engine_info = vec![
-        Line::from(vec![
-            Span::styled(" Oscillator: ", Style::default().fg(Color::Gray)),
-            Span::styled(
-                format!("[{}]", waveform.name()),
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("  Voices: ", Style::default().fg(Color::Gray)),
-            Span::styled(
-                format!("{}/8", voices),
-                Style::default()
-                    .fg(if voices > 6 { Color::Yellow } else { Color::Green })
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(" Audio I/O:  ", Style::default().fg(Color::Gray)),
-            Span::styled(
-                format!("{} Hz | {} smp buf", sample_rate, buffer_size),
-                Style::default().fg(Color::White),
-            ),
-        ]),
-    ];
+    let engine_inner_width = hud_chunks[0].width.saturating_sub(2);
+    let voice_style = Style::default()
+        .fg(if voices > 6 {
+            Color::Yellow
+        } else {
+            Color::Green
+        })
+        .add_modifier(Modifier::BOLD);
 
+    let mut engine_info = if engine_inner_width < 38 {
+        vec![
+            Line::from(vec![
+                Span::styled(" Osc: ", Style::default().fg(Color::Gray)),
+                Span::styled(
+                    format!("[{}]", waveform.name()),
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled("  V:", Style::default().fg(Color::Gray)),
+                Span::styled(format!("{}/8", voices), voice_style),
+            ]),
+            Line::from(vec![
+                Span::styled(" I/O: ", Style::default().fg(Color::Gray)),
+                Span::styled(
+                    format!("{} Hz | {} smp", sample_rate, buffer_size),
+                    Style::default().fg(Color::White),
+                ),
+            ]),
+        ]
+    } else {
+        vec![
+            Line::from(vec![
+                Span::styled(" Oscillator: ", Style::default().fg(Color::Gray)),
+                Span::styled(
+                    format!("[{}]", waveform.name()),
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled("  Voices: ", Style::default().fg(Color::Gray)),
+                Span::styled(format!("{}/8", voices), voice_style),
+            ]),
+            Line::from(vec![
+                Span::styled(" Audio I/O:  ", Style::default().fg(Color::Gray)),
+                Span::styled(
+                    format!("{} Hz | {} smp buf", sample_rate, buffer_size),
+                    Style::default().fg(Color::White),
+                ),
+            ]),
+        ]
+    };
+
+    if let Some(err) = shared.audio_error() {
+        let label = if engine_inner_width < 38 {
+            " Err: "
+        } else {
+            " Audio Err:  "
+        };
+        engine_info.push(Line::from(vec![
+            Span::styled(
+                label,
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(err, Style::default().fg(Color::Red)),
+        ]));
+    }
+
+    let engine_title = if engine_inner_width < 26 {
+        " DSP ENGINE "
+    } else {
+        " RUSTY-SYNTH DSP ENGINE "
+    };
     let engine_block = Paragraph::new(engine_info).block(
         Block::default()
-            .title(" RUSTY-SYNTH DSP ENGINE ")
+            .title(engine_title)
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Cyan)),
     );
@@ -120,37 +235,72 @@ fn draw_hud(
     let cutoff = shared.cutoff_hz();
     let gain = shared.master_gain();
 
-    let filter_info = vec![
-        Line::from(vec![
-            Span::styled(" ADSR:   ", Style::default().fg(Color::Gray)),
-            Span::styled(
-                format!(
-                    "A:{:.0}ms D:{:.0}ms S:{:.0}% R:{:.0}ms",
-                    adsr.attack_secs * 1000.0,
-                    adsr.decay_secs * 1000.0,
-                    adsr.sustain_level * 100.0,
-                    adsr.release_secs * 1000.0
+    let filter_inner_width = hud_chunks[1].width.saturating_sub(2);
+    let filter_info = if filter_inner_width < 38 {
+        vec![
+            Line::from(vec![
+                Span::styled(" ADSR: ", Style::default().fg(Color::Gray)),
+                Span::styled(
+                    format!(
+                        "{:.0}/{:.0}/{:.0}%/{:.0}",
+                        adsr.attack_secs * 1000.0,
+                        adsr.decay_secs * 1000.0,
+                        adsr.sustain_level * 100.0,
+                        adsr.release_secs * 1000.0
+                    ),
+                    Style::default().fg(Color::Magenta),
                 ),
-                Style::default().fg(Color::Magenta),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(" Filter: ", Style::default().fg(Color::Gray)),
-            Span::styled(
-                format!("LPF {:.0} Hz", cutoff),
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("  Gain: ", Style::default().fg(Color::Gray)),
-            Span::styled(
-                format!("{:.0}%", gain * 100.0),
-                Style::default()
-                    .fg(Color::Green)
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ]),
-    ];
+            ]),
+            Line::from(vec![
+                Span::styled(" LPF:", Style::default().fg(Color::Gray)),
+                Span::styled(
+                    format!("{:.0}Hz", cutoff),
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(" Vol:", Style::default().fg(Color::Gray)),
+                Span::styled(
+                    format!("{:.0}%", gain * 100.0),
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]),
+        ]
+    } else {
+        vec![
+            Line::from(vec![
+                Span::styled(" ADSR:   ", Style::default().fg(Color::Gray)),
+                Span::styled(
+                    format!(
+                        "A:{:.0}ms D:{:.0}ms S:{:.0}% R:{:.0}ms",
+                        adsr.attack_secs * 1000.0,
+                        adsr.decay_secs * 1000.0,
+                        adsr.sustain_level * 100.0,
+                        adsr.release_secs * 1000.0
+                    ),
+                    Style::default().fg(Color::Magenta),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled(" Filter: ", Style::default().fg(Color::Gray)),
+                Span::styled(
+                    format!("LPF {:.0} Hz", cutoff),
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled("  Gain: ", Style::default().fg(Color::Gray)),
+                Span::styled(
+                    format!("{:.0}%", gain * 100.0),
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]),
+        ]
+    };
 
     let filter_block = Paragraph::new(filter_info).block(
         Block::default()
@@ -169,10 +319,15 @@ fn draw_hud(
         Color::Green
     };
 
+    let gauge_title = if hud_chunks[2].width.saturating_sub(2) < 23 {
+        " LEVEL (dBFS) "
+    } else {
+        " OUTPUT LEVEL (dBFS) "
+    };
     let gauge = Gauge::default()
         .block(
             Block::default()
-                .title(" OUTPUT LEVEL (dBFS) ")
+                .title(gauge_title)
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Green)),
         )
@@ -183,22 +338,29 @@ fn draw_hud(
 }
 
 fn draw_spectrum(frame: &mut Frame, area: Rect, snapshot: &VisualizerSnapshot) {
-    let bars: Vec<(&str, u64)> = BIN_LABELS
-        .iter()
-        .copied()
-        .zip(snapshot.spectrum_bins.iter().copied())
-        .collect();
+    let inner_width = area.width.saturating_sub(2);
+    let layout = compute_spectrum_layout(inner_width);
+    let bars = aggregate_spectrum_bars(&snapshot.spectrum_bins, layout.num_bars);
+
+    let title = if inner_width < 64 {
+        format!(" FFT SPECTRUM ({} BANDS, -60..0dB) ", bars.len())
+    } else {
+        format!(
+            " REAL-TIME FFT SPECTRUM ANALYZER ({} LOG BANDS, -60dB to 0dB) ",
+            bars.len()
+        )
+    };
 
     let barchart = BarChart::default()
         .block(
             Block::default()
-                .title(" REAL-TIME FFT SPECTRUM ANALYZER (28 LOG BANDS, -60dB to 0dB) ")
+                .title(title)
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Blue)),
         )
         .data(&bars)
-        .bar_width(3)
-        .bar_gap(1)
+        .bar_width(layout.bar_width)
+        .bar_gap(layout.bar_gap)
         .max(100)
         .bar_style(Style::default().fg(Color::Cyan))
         .value_style(
@@ -248,8 +410,14 @@ fn draw_oscilloscope(frame: &mut Frame, area: Rect, snapshot: &VisualizerSnapsho
 }
 
 fn draw_keyboard_and_controls(frame: &mut Frame, area: Rect, active_notes: &[u8]) {
+    let inner_width = area.width.saturating_sub(2);
+    let compact = inner_width < 98;
+
     let mut key_spans = Vec::with_capacity(PIANO_KEYS.len() * 2 + 2);
-    key_spans.push(Span::styled(" Keys: ", Style::default().fg(Color::Gray)));
+    key_spans.push(Span::styled(
+        if compact { "Keys:" } else { " Keys: " },
+        Style::default().fg(Color::Gray),
+    ));
 
     for (key_char, midi_note, note_name) in PIANO_KEYS {
         let is_pressed = active_notes.contains(&midi_note);
@@ -264,11 +432,19 @@ fn draw_keyboard_and_controls(frame: &mut Frame, area: Rect, active_notes: &[u8]
             Style::default().fg(Color::White)
         };
 
-        key_spans.push(Span::styled(
-            format!(" {}:{} ", key_char.to_ascii_uppercase(), note_name),
-            style,
-        ));
-        key_spans.push(Span::raw(" "));
+        if compact {
+            key_spans.push(Span::raw(" "));
+            key_spans.push(Span::styled(
+                format!("{}:{}", key_char.to_ascii_uppercase(), note_name),
+                style,
+            ));
+        } else {
+            key_spans.push(Span::styled(
+                format!(" {}:{} ", key_char.to_ascii_uppercase(), note_name),
+                style,
+            ));
+            key_spans.push(Span::raw(" "));
+        }
     }
 
     let controls_line_1 = Line::from(key_spans);
@@ -297,4 +473,91 @@ fn draw_keyboard_and_controls(frame: &mut Frame, area: Rect, active_notes: &[u8]
     );
 
     frame.render_widget(paragraph, area);
+}
+
+#[cfg(test)]
+mod tests {
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+
+    use super::*;
+
+    #[test]
+    fn spectrum_layout_fits_within_available_width_without_clipping() {
+        for inner_width in 0..=150_u16 {
+            let layout = compute_spectrum_layout(inner_width);
+            if inner_width == 0 {
+                assert_eq!(layout.num_bars, 0);
+                continue;
+            }
+            assert!(layout.num_bars >= 1 && layout.num_bars <= NUM_BINS);
+            let used = layout.num_bars * layout.bar_width as usize
+                + layout.num_bars.saturating_sub(1) * layout.bar_gap as usize;
+            assert!(
+                used <= inner_width as usize,
+                "layout {layout:?} used {used} > inner_width {inner_width}"
+            );
+        }
+
+        // Standard 80-col terminal (~46 inner cols) and 120-col terminal (~71 inner cols)
+        let l80 = compute_spectrum_layout(46);
+        assert_eq!(l80.bar_width, 3);
+        assert_eq!(l80.num_bars, 11);
+
+        let l120 = compute_spectrum_layout(71);
+        assert_eq!(l120.bar_width, 3);
+        assert_eq!(l120.num_bars, 18);
+
+        let l_wide = compute_spectrum_layout(120);
+        assert_eq!(l_wide.bar_width, 3);
+        assert_eq!(l_wide.num_bars, NUM_BINS);
+    }
+
+    #[test]
+    fn aggregate_spectrum_bars_preserves_high_frequency_energy_when_downsampled() {
+        let mut bins = [0_u64; NUM_BINS];
+        bins[0] = 42;
+        bins[NUM_BINS - 1] = 88; // 11 kHz bin
+
+        let bars = aggregate_spectrum_bars(&bins, 11);
+        assert_eq!(bars.len(), 11);
+        assert_eq!(bars[0], ("45", 42));
+        assert_eq!(bars[10], ("11k", 88));
+    }
+
+    #[test]
+    fn draw_ui_renders_cleanly_at_80_and_120_columns_and_shows_errors() {
+        let shared = SharedSynthState::new();
+        shared.set_audio_error("ALSA xrun");
+        let mut snapshot = VisualizerSnapshot::default();
+        snapshot.spectrum_bins[0] = 65;
+        snapshot.spectrum_bins[NUM_BINS - 1] = 90;
+        snapshot.peak_db = -12.0;
+
+        for (width, height) in [(80, 24), (100, 30), (120, 35), (190, 40), (20, 10)] {
+            let backend = TestBackend::new(width, height);
+            let mut terminal = Terminal::new(backend).unwrap();
+            terminal
+                .draw(|f| draw_ui(f, &shared, &snapshot, &[60, 64, 67]))
+                .unwrap();
+
+            let buf = terminal.backend().buffer();
+            let content: String = buf.content().iter().map(|c| c.symbol()).collect();
+            if width >= 80 {
+                // Both ends of the spectrum (45 Hz and 11k) and audio error surface cleanly
+                assert!(
+                    content.contains("45"),
+                    "missing 45Hz label at {width}x{height}"
+                );
+                assert!(
+                    content.contains("11k"),
+                    "missing 11k label at {width}x{height}"
+                );
+                assert!(
+                    content.contains("ALSA"),
+                    "missing error text at {width}x{height}"
+                );
+            }
+        }
+    }
 }

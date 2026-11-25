@@ -1,20 +1,15 @@
 # rusty-synth
 
-**`rusty-synth`** is a low-latency, real-time polyphonic terminal audio synthesizer and live FFT frequency spectrum visualizer written in Rust. Designed with strict real-time DSP systems engineering principles, the audio callback operates with **zero heap allocations, zero locks, and zero system calls**.
+[![CI](https://github.com/tahaenasraoui-debug/rusty-synth/actions/workflows/ci.yml/badge.svg)](https://github.com/tahaenasraoui-debug/rusty-synth/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+**`rusty-synth`** is a low-latency, real-time polyphonic terminal audio synthesizer and live FFT frequency spectrum visualizer written in Rust. Designed with strict real-time DSP systems engineering principles, the audio callback operates with **zero heap allocations, zero locks, and zero system calls**.
 
 ### Application Screenshot
 
 <p align="center">
-  <img src="./assets/image.png" >
+  <img src="./assets/image.png" alt="rusty-synth terminal synthesizer screenshot">
 </p>
-
-
-
-```
-
-
-```
 
 ## Key Features
 
@@ -34,31 +29,29 @@
 
 ### Chromatic Piano Keyboard (Home Row)
 
-```
-   ┌───┬───┐   ┌───┬───┬───┐ 
-   │ W │ E │   │ T │ Y │ U │ 
-   │C#4│D#4│   │F#4│G#4│A#4│   
- ┌─┴───┴───┴───┴───┴────┴──┴────┬
- │ A │ S │ D │ F │ G │ H │ J │ K│ 
- │C4 │D4 │E4 │F4 │G4 │A4 │B4 │C5│ 
- └───┴───┴───┴───┴───┴───┴───┴──┴
-
-
+```text
+   ┌───┬───┐   ┌───┬───┬───┐
+   │ W │ E │   │ T │ Y │ U │
+   │C#4│D#4│   │F#4│G#4│A#4│
+ ┌─┴─┬─┴─┬─┴─┬─┴─┬─┴─┬─┴─┬─┴─┬───┐
+ │ A │ S │ D │ F │ G │ H │ J │ K │
+ │C4 │D4 │E4 │F4 │G4 │A4 │B4 │C5 │
+ └───┴───┴───┴───┴───┴───┴───┴───┘
 ```
 
 ### Synth Parameters
 
-| Key | Action | Description | 
-| ----- | ----- | ----- | 
-| `A` `W` `S` `E` `D` `F` `T` `G` `Y` `H` `U` `J` `K` | **Play Notes** | Triggers MIDI notes `60` (`C4`) through `72` (`C5`) | 
-| `1` | **Sine Wave** | Pure fundamental tone | 
-| `2` | **Square Wave** | Hollow, woody odd-harmonic waveform (PolyBLEP anti-aliased) | 
-| `3` | **Sawtooth Wave** | Bright, brassy even+odd harmonic waveform (PolyBLEP anti-aliased) | 
-| `4` | **Triangle Wave** | Warm, flute-like waveform | 
-| `5` | **White Noise** | Flat-spectrum noise via zero-syscall Xorshift32 PRNG | 
-| `[` / `]` | **Filter Cutoff** | Sweeps the master low-pass filter cutoff down / up | 
-| `-` / `=` | **Master Gain** | Decreases / increases master output volume (`5%` – `150%`) | 
-| `Q` / `Esc` | **Quit** | Gracefully stops threads and restores terminal state | 
+| Key | Action | Description |
+| ----- | ----- | ----- |
+| `A` `W` `S` `E` `D` `F` `T` `G` `Y` `H` `U` `J` `K` | **Play Notes** | Triggers MIDI notes `60` (`C4`) through `72` (`C5`) |
+| `1` | **Sine Wave** | Pure fundamental tone |
+| `2` | **Square Wave** | Hollow, woody odd-harmonic waveform (PolyBLEP anti-aliased) |
+| `3` | **Sawtooth Wave** | Bright, brassy even+odd harmonic waveform (PolyBLEP anti-aliased) |
+| `4` | **Triangle Wave** | Warm, flute-like waveform |
+| `5` | **White Noise** | Flat-spectrum noise via zero-syscall Xorshift32 PRNG |
+| `[` / `]` | **Filter Cutoff** | Sweeps the master low-pass filter cutoff down / up |
+| `-` / `=` | **Master Gain** | Decreases / increases master output volume (`5%` – `150%`) |
+| `Q` / `Esc` | **Quit** | Gracefully stops threads and restores terminal state |
 
 ## System Architecture
 
@@ -74,11 +67,11 @@
 
    * Computes 12-TET pitch frequencies using:
 
-$$
-f = 440 \cdot 2^{\frac{n - 69}{12}}
-$$
+     $$
+     f = 440 \cdot 2^{\frac{n - 69}{12}}
+     $$
 
-* Pushes 256-sample mono buffers to the visualizer via `try_send()` (dropping frames safely if the UI is busy, guaranteeing zero audio dropouts).
+   * Pushes 256-sample mono buffers to the visualizer via `try_send()` (dropping frames safely if the UI is busy, guaranteeing zero audio dropouts).
 
 2. **FFT & Spectrum Worker Thread (`src/visualizer/fft.rs`)**:
 
@@ -102,17 +95,15 @@ $$
 
 * **Linux (ALSA)**: Install the ALSA development headers:
 
-  ```
+  ```bash
   # Debian / Ubuntu
   sudo apt update && sudo apt install -y libasound2-dev pkg-config
-  
+
   # Fedora / RHEL
   sudo dnf install -y alsa-lib-devel pkgconf-pkg-config
-  
+
   # Arch Linux
   sudo pacman -S alsa-lib pkgconf
-  
-  
   ```
 
 * **macOS & Windows**: No external system libraries required (uses native `CoreAudio` and `WASAPI`).
@@ -121,20 +112,23 @@ $$
 
 Always build and run in `--release` mode to ensure DSP math and FFT passes are fully optimized:
 
-```
+```bash
 git clone https://github.com/tahaenasraoui-debug/rusty-synth.git
 cd rusty-synth
 cargo run --release
-
-
 ```
 
 ## Project Structure
 
-```
+```text
 rusty-synth/
+├── .github/
+│   └── workflows/
+│       └── ci.yml             # Format, Clippy & test workflow
 ├── Cargo.toml
+├── LICENSE
 ├── README.md
+├── rustfmt.toml
 ├── assets/
 │   └── image.png              # Demo screenshot loaded by README.md
 └── src/
@@ -151,8 +145,6 @@ rusty-synth/
     └── visualizer/
         ├── mod.rs
         └── fft.rs             # 2048-point Hann-windowed FFT & dB normalization
-
-
 ```
 
 ## License
