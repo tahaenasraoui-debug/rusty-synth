@@ -87,6 +87,19 @@
 
    * Supports Kitty/Crossterm keyboard enhancement flags for polyphonic key-release tracking, with an automatic gate-release fallback for standard terminals.
 
+## Windows Download
+
+Prebuilt native Windows (`x86_64`) executables and `SHA256SUMS.txt` checksums are available on the [GitHub Releases](https://github.com/tahaenasraoui-debug/rusty-synth/releases/latest) page:
+
+1. Download `rusty-synth.exe` (and optionally `SHA256SUMS.txt`) from the latest release.
+2. Verify the SHA-256 checksum in PowerShell if desired:
+
+   ```powershell
+   Get-FileHash .\rusty-synth.exe -Algorithm SHA256
+   ```
+
+3. Run `.\rusty-synth.exe` in Windows Terminal or PowerShell (uses native `WASAPI` audio, no external runtime required).
+
 ## Getting Started
 
 ### Prerequisites
@@ -124,7 +137,8 @@ cargo run --release
 rusty-synth/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml             # Format, Clippy & test workflow
+│       ├── ci.yml             # Format, Clippy & test workflow
+│       └── release.yml        # Windows release build & GitHub Release workflow
 ├── Cargo.toml
 ├── LICENSE
 ├── README.md

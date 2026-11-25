@@ -1,6 +1,12 @@
 # Rust build artifacts
 /target
 
+# Windows / release build artifacts
+*.exe
+dist/
+build/
+*.spec
+
 # IDE and editor files
 .idea/
 .vscode/

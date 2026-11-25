@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Optional tag to publish a GitHub Release (e.g. v1.0.0); leave blank to upload workflow artifact only"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  windows-release:
+    name: Build Windows x86_64 Release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-release-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run unit tests (headless smoke check)
+        run: cargo test --locked
+
+      - name: Build release executable
+        run: cargo build --release --locked
+
+      - name: Package executable and generate SHA256SUMS.txt
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item -Path target/release/rusty-synth.exe -Destination dist/rusty-synth.exe -Force
+          if (-not (Test-Path dist/rusty-synth.exe) -or ((Get-Item dist/rusty-synth.exe).Length -le 0)) {
+            throw "Built binary dist/rusty-synth.exe is missing or empty"
+          }
+          $hash = (Get-FileHash -Path dist/rusty-synth.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          Set-Content -Path dist/SHA256SUMS.txt -Value "$hash  rusty-synth.exe" -Encoding Ascii
+          Get-Content dist/SHA256SUMS.txt
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rusty-synth-windows-x86_64
+          path: |
+            dist/rusty-synth.exe
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag || github.ref_name }}
+          generate_release_notes: true
+          files: |
+            dist/rusty-synth.exe
+            dist/SHA256SUMS.txt
