@@ -3,7 +3,7 @@ name = "rusty-synth"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.75"
-authors = ["Abass le roi des Bobbys"]
+authors = ["Mohamed Taha Enasraoui"]
 description = "Real-time polyphonic terminal synthesizer and FFT spectrum visualizer"
 license = "MIT"
 
