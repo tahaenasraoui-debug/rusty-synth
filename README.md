@@ -3,7 +3,7 @@
 [![CI](https://github.com/tahaenasraoui-debug/rusty-synth/actions/workflows/ci.yml/badge.svg)](https://github.com/tahaenasraoui-debug/rusty-synth/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**`rusty-synth`** is a low-latency, real-time polyphonic terminal audio synthesizer and live FFT frequency spectrum visualizer written in Rust. Designed with strict real-time DSP systems engineering principles, the audio callback operates with **zero heap allocations, zero locks, and zero system calls**.
+Low-latency polyphonic terminal audio synthesizer and live FFT spectrum visualizer written in Rust. The real-time audio callback runs with no heap allocations, locks, or system calls.
 
 ### Application Screenshot
 
@@ -13,15 +13,15 @@
 
 ## Key Features
 
-* **Lock-Free Real-Time Audio Engine**: Powered by `cpal` at `48,000 Hz` or `44,100 Hz` with ultra-low `256`-sample hardware buffers.
+* **Lock-Free Real-Time Audio Engine**: Powered by `cpal` at `48,000 Hz` or `44,100 Hz` with `256`-sample hardware buffers.
 
 * **Anti-Aliased Waveforms**: Supports **Sine**, **PolyBLEP Square**, **PolyBLEP Sawtooth**, **Triangle**, and deterministic **Xorshift32 White Noise**.
 
-* **8-Voice Polyphony**: Dynamic voice manager with intelligent voice stealing (prioritizes idle voices, then the oldest voice in its `Release` phase).
+* **8-Voice Polyphony**: Dynamic voice manager with voice stealing (prioritizes idle voices, then the oldest voice in its `Release` phase).
 
 * **Click-Free ADSR Envelopes**: Per-voice linear Attack-Decay-Sustain-Release state machine with smooth re-triggering.
 
-* **Master Low-Pass Filter & Soft Limiter**: Unconditionally stable one-pole low-pass filter (`120 Hz` – `18,000 Hz`) paired with a `tanh` saturation stage.
+* **Master Low-Pass Filter & Soft Limiter**: One-pole low-pass filter (`120 Hz` – `18,000 Hz`) paired with a `tanh` saturation stage.
 
 * **Real-Time 2,048-Point FFT Visualizer**: Dedicated worker thread running `rustfft` with a Hann window, mapped across 28 logarithmically spaced musical frequency bins (`-60 dB` to `0 dB`) alongside a Braille time-domain oscilloscope.
 
@@ -51,7 +51,7 @@
 | `5` | **White Noise** | Flat-spectrum noise via zero-syscall Xorshift32 PRNG |
 | `[` / `]` | **Filter Cutoff** | Sweeps the master low-pass filter cutoff down / up |
 | `-` / `=` | **Master Gain** | Decreases / increases master output volume (`5%` – `150%`) |
-| `Q` / `Esc` | **Quit** | Gracefully stops threads and restores terminal state |
+| `Q` / `Esc` | **Quit** | Stops threads cleanly and restores terminal state |
 
 ## System Architecture
 
